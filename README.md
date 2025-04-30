@@ -10,6 +10,7 @@ We are in the process of finalizing and organizing the materials. The following 
 
 📌 Please check back soon or click "Watch" on this repository to receive updates.
 
-For questions, feel free to open an issue or contact the corresponding author.
+For questions, feel free to [open an issue](#) or contact the corresponding author at [tadnan@ur.rochester.edu](mailto:tadnan@ur.rochester.edu).
+
 
 ---
