@@ -118,7 +118,7 @@ def feature_selection_boosting(features:pd.DataFrame, labels, **cfg):
 def draw_plots(cm, class_names, model_name, fpr, tpr, roc_auc, first_line, second_line, zero_line=None):
 
     # in a pkl file, save the confusion matrix, class names, model name, y_true_total, y_score_total
-    with open('figures/{}.pkl'.format(model_name), 'wb') as f:
+    with open('{}.pkl'.format(model_name), 'wb') as f:
         pickle.dump([cm, class_names, model_name, fpr, tpr, roc_auc, first_line, second_line, zero_line], f)
         
     # Plot confusion matrix
@@ -131,7 +131,7 @@ def draw_plots(cm, class_names, model_name, fpr, tpr, roc_auc, first_line, secon
     plt.ylabel('True Label', fontsize=max_size, labelpad=20)
     plt.xlabel('Predicted Label', fontsize=max_size, labelpad=20)
     # plt.title('Confusion matrix for {}'.format(model_name), fontsize=max_size - 2, pad=10)
-    plt.savefig('figures/confusion_matrix_{}.jpg'.format(model_name), dpi=800, bbox_inches='tight')
+    plt.savefig('confusion_matrix_{}.jpg'.format(model_name), dpi=800, bbox_inches='tight')
     print('Confusion matrix for {} saved'.format(model_name))
     plt.close()
 
@@ -162,7 +162,7 @@ def draw_plots(cm, class_names, model_name, fpr, tpr, roc_auc, first_line, secon
     plt.text(0.5, 0.4, first_line, ha='center', fontsize=max_size)
     plt.text(0.5, 0.3, second_line, ha='center', fontsize=max_size)
     plt.text(0.5, 0.2, 'AUROC: %0.2f' % round(roc_auc, 2), ha='center', fontsize=max_size)
-    plt.savefig('figures/roc_curve_{}.jpg'.format(model_name), dpi=800, bbox_inches='tight')
+    plt.savefig('roc_curve_{}.jpg'.format(model_name), dpi=800, bbox_inches='tight')
     print('ROC curve for {} saved'.format(model_name))
     plt.close()
     
@@ -528,7 +528,7 @@ def run_ensemble_models(df, cfg):
             "name": cfg.name,  # Name of the ensemble method
             "config_file": cfg.config_file,
             "first_line": '',
-            "second_line": 'Held out data',
+            "second_line": 'Validation dataset',
         })
     
 
@@ -647,7 +647,7 @@ def run_ensemble_models(df, cfg):
     return result
 
 def main():
-    ENABLE_WANDB = True
+    ENABLE_WANDB = False
     
     parser = argparse.ArgumentParser(description='Run a model')
     
@@ -656,7 +656,7 @@ def main():
     parser.add_argument('--random_state', type=int, default=6424, help='Seed for the random number generator')
     parser.add_argument('--num_fold', type=int, default=10, help='Number of folds for cross-validation')
     parser.add_argument('--sorting_metric', type=str, default='Accuracy', help='Sorting metric to be used in sort the configurations')
-    parser.add_argument('--name', type=str, default='Ensemble with LR', help='Name of the ensemble method')
+    parser.add_argument('--name', type=str, default='cross_validation', help='Name of the ensemble method')
     parser.add_argument('--config_file', type=str, default='cross-validation-hist-configs.csv', help='Path to the configuration file')
     parser.add_argument('--C', type=float, default=40.36631131136931, help='Regularization parameter for the model')
     parser.add_argument('--max_iter', type=int, default=115, help='Maximum number of iterations for the model to converge')
