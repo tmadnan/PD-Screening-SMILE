@@ -1,37 +1,52 @@
-# SMILE — separate, Git-ready leakage-controlled evaluation variants
+# SMILE — HistBoost Ensemble Experiments
 
-This folder contains five independently executable scripts with **one shared implementation** so folds, preprocessing, base configurations, and metric calculations stay consistent. It is a *re-evaluation* of the historical SMILE HistBoost experiments, not a replacement for the published study.
+This directory introduces an experimental suite for comparing **single-model HistBoost** with several **logistic-regression stacking** strategies for Parkinson's disease screening from smile-video features. The goal is to study how base-model prediction representation and meta-training class balance affect classification performance while keeping the underlying HistBoost configurations and evaluation splits consistent.
 
-## Files and model versions
+The experiments build on the established SMILE feature representation and model configurations. They are **additional modeling experiments**, not changes to the published SMILE findings.
 
-| Script | Model / change | Meta learner input | Meta training balance |
+## Experiments
+
+| Script | Experiment | Meta-model inputs | Meta-training distribution |
 |---|---|---|---|
-| `01_single_histboost.py` | Historical top-ranked HistBoost alone | N/A | N/A |
-| `02_stack_binary.py` | Original-style stacking, corrected fold boundaries | Hard class predictions, 0/1 | Natural class ratio |
-| `03_stack_binary_balanced.py` | Binary stacking with balanced meta training | Hard class predictions, 0/1 | RandomOverSampler |
-| `04_stack_probability.py` | Probability stacking | Continuous probabilities | Natural class ratio |
-| `05_stack_probability_balanced.py` | Probability stacking with balanced meta training | Continuous probabilities | RandomOverSampler |
-| `06_compare_all.py` | All five variants **on the same fitted bases and folds** | Each as above | Each as above |
+| `01_single_histboost.py` | Single HistBoost reference model | — | — |
+| `02_stack_binary.py` | Logistic regression stacking with class labels | Binary predictions (0 or 1) | Observed class distribution |
+| `03_stack_binary_balanced.py` | Binary stacking with class-balanced meta-training | Binary predictions (0 or 1) | Random oversampling |
+| `04_stack_probability.py` | Logistic regression stacking with confidence scores | Predicted probabilities | Observed class distribution |
+| `05_stack_probability_balanced.py` | Probability stacking with class-balanced meta-training | Predicted probabilities | Random oversampling |
+| `06_compare_all.py` | Evaluate all five variants in one run | As specified above | As specified above |
 
-`smile_variants_core.py` is the common evaluator. `smile_base.py` is the earlier corrected SMILE feature-selection/SMOTE/HistBoost implementation reused by all variants. Each numbered Python file is intentionally a small, independent entry point; this avoids five subtly different versions of data splitting or preprocessing in Git.
+Each numbered script can be run independently. The shared modules, `smile_base.py` and `smile_variants_core.py`, implement data preparation, model construction, cross-validation, and evaluation consistently across experiments. The combined runner reuses the same fitted base models and folds for more directly comparable results.
 
-`reference_results/` contains the **previously completed full 10-outer-fold, 3-inner-fold, 18-configuration real-data comparison**, not new metrics from the final packaged code. It is supplied for comparison/auditing. The current package passed a 2-outer-fold/2-inner-fold/2-config end-to-end smoke test on the uploaded real input files.
+## Experimental design
 
-## Run from your Git repository
+- **Input representation:** SMILE's structured action-unit and MediaPipe-derived facial features.
+- **Base-model configurations:** The selected HistBoost configurations are read from `cross-validation-hist-configs.csv`. By default, the first 18 configurations are chosen according to the historical validation-accuracy ranking (including the CSV's original sorting behavior).
+- **Base-model settings:** Saved HistBoost learning rates, tree settings, feature counts, and random seeds are retained from the corresponding configuration entries.
+- **Meta-classifier:** Logistic regression with the previously used settings (`C=40.36631131136931`, `penalty=l1`, `solver=saga`, `max_iter=115`, `tol=0.0009070426942042604`, `random_state=6424`).
+- **Evaluation:** By default, 10 outer folds and 3 inner folds are used. Fold-wise feature preparation, feature ranking, and SMOTE operate on the applicable training partitions. The stacking experiments use out-of-fold predictions to construct meta-training features. Final metrics are calculated on held-out participants.
+- **Participant separation:** With one record per participant, stratified folds are used; when repeated participant IDs are present, group-aware splitting is used.
+- **Comparison controls:** All variants use matched partitions and base-model configurations, allowing the effects of binary vs. probability inputs and balanced vs. observed meta-training distributions to be examined separately.
 
-Place this directory inside `PD-Screening-SMILE/cross_validation/` (e.g. `cross_validation/leakage_controlled_versions/`). Keep your existing original files unchanged. Then:
+The suite uses a default `lbfgs` numerical solver for logistic-regression-based feature ranking. The `--ranking-solver statsmodels` option is available for experiments with the alternative implementation. Feature ranking may show convergence warnings, which should be reviewed when interpreting model comparisons.
+
+## Installation and execution
+
+Place this directory within `PD-Screening-SMILE/cross_validation/`, for example as `cross_validation/ensemble_experiments/`. Keep the existing experiment scripts and datasets in place.
 
 ```bash
-cd PD-Screening-SMILE/cross_validation/leakage_controlled_versions
+cd PD-Screening-SMILE/cross_validation/ensemble_experiments
 python -m pip install -r requirements.txt
 
 python 06_compare_all.py \
   --dataset ../dataset-cross-validation.csv \
   --configs ../cross-validation-hist-configs.csv \
-  --outer-folds 10 --inner-folds 3 --num-configs 18 --jobs 4
+  --outer-folds 10 \
+  --inner-folds 3 \
+  --num-configs 18 \
+  --jobs 4
 ```
 
-Each script also runs independently. For example:
+To run a specific variant:
 
 ```bash
 python 01_single_histboost.py --dataset ../dataset-cross-validation.csv --configs ../cross-validation-hist-configs.csv
@@ -41,53 +56,44 @@ python 04_stack_probability.py --dataset ../dataset-cross-validation.csv --confi
 python 05_stack_probability_balanced.py --dataset ../dataset-cross-validation.csv --configs ../cross-validation-hist-configs.csv
 ```
 
-By default each variant writes `runs/<variant>/{metrics.json,fold_metrics.csv,heldout_predictions.csv,historical_configurations.csv}`. The combined evaluator writes `runs/all/` and shares base model fits, rather than wasting time fitting them separately for each variant. For a rapid check, add `--num-configs 2 --outer-folds 2 --inner-folds 2 --jobs 1`.
+For a quicker execution check:
 
-## What is intentionally preserved
+```bash
+python 06_compare_all.py \
+  --dataset ../dataset-cross-validation.csv \
+  --configs ../cross-validation-hist-configs.csv \
+  --outer-folds 2 --inner-folds 2 --num-configs 2 --jobs 1
+```
 
-- Original **top 18 configurations selected by historical `Accuracy`**, including pandas' default tie sorting (not random candidates).
-- Exact saved HistBoost learning rate, depth, leaves, feature-count and random seed from each configuration row.
-- HistGradientBoostingClassifier's otherwise default parameters and the original smile-only AU + MediaPipe feature subset.
-- Original logistic-regression meta-classifier defaults: **C=40.36631131136931, max_iter=115, penalty=l1, solver=saga, tol=0.0009070426942042604, random_state=6424**.
-- Original outer `StratifiedKFold` with shuffle and seed 42 when one row per participant, as in the uploaded dataset (827 records, 827 unique IDs). If IDs repeat, a participant-grouped splitter is used.
-- Base-level SMOTE on **training** data only, as before. Final model performance is measured on real held-out participants without synthetic evaluation records.
+Results are written under `runs/<variant>/` (or `runs/all/` for the combined comparison), including `metrics.json`, `fold_metrics.csv`, `heldout_predictions.csv`, and `historical_configurations.csv`.
 
-## What changes (and why)
+## Reference results
 
-1. The feature selector, its scaling, and its SMOTE-based ranking data are fitted inside each relevant **training** fold only; the held-out fold is never used for fitting.
-2. Base model features for the meta-classifier are generated **out of fold within each outer training partition**. Base models are then refit on that outer-training partition and evaluated on its untouched outer test fold. The meta-classifier does not train on in-sample predictions.
-3. `04_*` and `05_*` use **probabilities** instead of the original hard predictions; this is an **experimental architecture change**, not merely a leakage fix.
-4. `03_*` and `05_*` balance the **meta-feature** training data via `RandomOverSampler`; this is a new diagnostic choice. The original code obtained balanced training examples differently by SMOTE applied before its meta training prediction generation.
-5. Feature-ranking numerical solver defaults to **sklearn unpenalized, no-intercept logistic regression (LBFGS, max_iter=200)**, replacing the original `statsmodels.Logit(...).fit(method='bfgs', maxiter=1000)`. This substitution was necessary for completing the earlier comparison but it can change which features are selected and can emit *ConvergenceWarning*. It is **not** an exact replication. Use `--ranking-solver statsmodels` to run the original implementation; it may be very slow or unstable. All warning messages should be retained and audited.
-6. Inner folds default to **3**, the setting used for the completed diagnostic study. For a more extensive analysis, pass `--inner-folds 10` (with a greater computational cost). Inner folds only generate meta-training OOF features; historical model configuration selection remains frozen.
+The `reference_results/` directory contains outputs from a previously completed **10-outer-fold / 3-inner-fold / 18-configuration** comparison on 827 available participant records. These files are archived experimental reference results, **not a fresh execution of the final packaged entry points**.
 
-## Remaining sources of bias and interpretation
-
-**Do not describe these results as fully leakage-free model selection.** Historical top-18 configuration IDs came from searches using the same 827-person development dataset. The current re-evaluation contains no direct held-out-fold preprocessing or stacking-fitting leakage **within each run**, but earlier use of development labels to select model configurations can still bias CV estimates. Truly independent performance needs either a fresh outer-fold configuration search using a prespecified candidate space or an untouched external test cohort.
-
-**Do not equate the first-ranked configuration with the strongest present-day baseline.** The first row was selected by historical *accuracy*. Its pooled new AUROC was 88.52%. Among all 18 original configurations, the largest observed pooled AUROC was 89.97% (sixth historical-accuracy rank). This ranking is *post hoc* on held-out predictions and is **not valid as a fresh unbiased model selection**.
-
-The historical config CSV has scores (Accuracy, ROC AUC) but does **not** encode all preprocessing choices (e.g., scaler/feature selection/SMOTE). Those omitted fields are filled with the documented selected defaults. This is an assumption, not exact reconstruction of every historical run.
-
-The supplementary manuscript refers to 640 non-PD + 195 PD enrolled/development participants (835), while the uploaded *usable feature CSV* has 632 non-PD + 195 PD (827). That discrepancy merits a check against the exact cohort inclusion and video-validity criteria before treating the datasets as identical.
-
-## Previously completed 10-fold diagnostic results (NOT a fresh run of these packaged scripts)
-
-| Model | Pooled AUROC | Accuracy | Sensitivity | Specificity |
+| Experiment | Pooled AUROC (%) | Accuracy (%) | Sensitivity (%) | Specificity (%) |
 |---|---:|---:|---:|---:|
-| Historical top-accuracy HistBoost only | 88.52 | 82.22 | 63.59 | 87.97 |
-| Binary LR stack, no meta balancing | 84.73 | 85.13 | 63.08 | 91.93 |
-| Binary LR stack, meta balancing | 84.53 | 84.64 | 73.33 | 88.13 |
-| Probability LR stack, no meta balancing | 89.03 | 84.52 | 63.08 | 91.14 |
-| Probability LR stack, meta balancing | 88.63 | 83.68 | 78.46 | 85.28 |
+| Single HistBoost (historically top-ranked by accuracy) | 88.52 | 82.22 | 63.59 | 87.97 |
+| Binary stacking | 84.73 | 85.13 | 63.08 | 91.93 |
+| Binary stacking + balanced meta-training | 84.53 | 84.64 | 73.33 | 88.13 |
+| Probability stacking | 89.03 | 84.52 | 63.08 | 91.14 |
+| Probability stacking + balanced meta-training | 88.63 | 83.68 | 78.46 | 85.28 |
 
-These are pooled AUROCs, not averages of fold AUROCs, at threshold 0.5. The full per-model results, fold metrics and participant-level OOF predictions are in `reference_results/`.
+The results illustrate trade-offs among model discrimination, sensitivity, and specificity. In this run, probability-based stacking achieved higher AUROC than binary stacking, while balanced meta-training increased sensitivity with a corresponding specificity trade-off. All tabulated metrics use pooled outer-held-out predictions and a classification threshold of 0.5 for threshold-dependent metrics.
 
-## Next scientific checks
+The *historically top-ranked* single model is defined by its earlier accuracy ranking, not by maximum AUROC in the new reference comparison. Different ranking criteria can select different configurations.
 
-1. Compare *identical* training/evaluation splits with original versus new feature-ranking solver and record selected feature overlaps, nonconvergence and coefficient variation.
-2. Confirm the exact 827-person usable-video cohort and original code commit/data version.
-3. Assess the candidate-selection effect with a proper outer-fold hyperparameter search (large computational budget) or freeze the resulting full pipeline and measure Clinic and Home-BD external cohorts.
-4. Evaluate thresholds chosen only inside outer training folds, reporting AUROC separately from threshold-dependent sensitivity/specificity.
+## Scope and interpretation
 
-Original project source: https://github.com/tmadnan/PD-Screening-SMILE/tree/main/cross_validation
+This package is intended for **controlled comparative experiments**, not as a claim of improved clinical screening performance. The candidate HistBoost configurations originated from prior development experiments on the same cohort, so these CV results should be treated as development-stage estimates. An untouched external cohort or a fully prespecified, nested model-selection study would provide a stronger independent performance estimate.
+
+The uploaded feature CSV used here has 827 participant records; the supplementary manuscript describes a larger development cohort. Reproducing manuscript numbers requires verifying the exact analysis cohort and data version. The numerical feature-ranking implementation and the number of inner folds can also affect the observed metrics. See `SMOKE_TEST.md` for the package execution check.
+
+## Potential follow-up experiments
+
+- Evaluate alternative meta-learning representations, including probability calibration and threshold selection.
+- Explore meta-classifier regularization and class-weighting strategies under a consistent outer evaluation protocol.
+- Compare selected feature subsets and optimization convergence across feature-ranking solvers.
+- Assess model robustness on independent Clinic and Home-BD cohorts.
+
+**Project:** [PD-Screening-SMILE / cross_validation](https://github.com/tmadnan/PD-Screening-SMILE/tree/main/cross_validation)
